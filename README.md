@@ -35,12 +35,17 @@ Design phase (done):
 - [x] `corpus/attacks/` — 15 seed entries, license-attributed
 - [x] `ARCHITECTURE.md` — 4-stage pipeline, ONNX backend, judge defenses
 
-Implementation phase (next):
+Implementation phase (in progress):
 
-- [ ] First public push of the design docs
+- [x] First public push of the design docs
+- [x] Stage 0 — JSON ingest into per-surface `Unit` records
+- [x] Stage 1 — literal / pseudo-XML / parameter-name prefilter
+- [x] Stage 2 — embedding retrieval via Voyage AI (`voyage-3.5-lite`)
+- [ ] Stage 3 — structurally-defended LLM judge
+- [ ] Stage 4 — text / json / sarif report renderers
 - [ ] Negative corpus: 40+ benign entries from `modelcontextprotocol/servers`
-- [ ] Scanner v0.1 — Stages 0–4 wired end-to-end against the current 15 attacks
 - [ ] Threshold tuning on benign corpus once it exists
+- [ ] Local ONNX embedding backend (v0.2 — see `ARCHITECTURE.md §4.2`)
 - [ ] MCPTox eval-set integration when the dataset becomes public
 
 ## Non-goals

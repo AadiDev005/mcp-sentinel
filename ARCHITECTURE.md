@@ -172,20 +172,20 @@ Corpus entries are embedded once at scanner startup using the same `EmbedInput()
 
 ### 4.2 Embedding backend — the choice
 
-Two backends, both supported, user picks:
+**v0.1 default: Voyage AI (`voyage-3.5-lite`, 1024-dim).** Required env var: `VOYAGE_API_KEY`. The interface (`Embedder`) is designed so swapping backends is a constructor change; a local ONNX backend remains on the v0.2 roadmap.
 
-| Option | Latency | Cost | Offline? | Use when |
-|---|---|---|---|---|
-| **Local ONNX** (default for v0.1) | ~5–10 ms / Unit on CPU | $0 | yes | CI runs, air-gapped environments, anyone who hates SaaS |
-| **Voyage / Cohere / OpenAI** | ~50–150 ms / Unit (network) | ~$0.0001 / Unit | no | one-shot scans, when fidelity > cost |
+| Option | Status | Latency | Cost | Offline? | Notes |
+|---|---|---|---|---|---|
+| **Voyage AI** (`voyage-3.5-lite`) | v0.1 default | ~80-150 ms / batch | Free tier: 200M tokens/mo | no | Single HTTP call per scan. Strong free tier. |
+| **OpenAI** (`text-embedding-3-small`) | v0.1 supported via API-compat shim (planned) | ~80-150 ms / batch | $0.02 / M tokens | no | Wider availability if Voyage is unreachable. |
+| **Local ONNX** (`bge-small-en-v1.5`, 384-dim) | **v0.2 roadmap** | ~5-10 ms / Unit | $0 | yes | Deferred: the Go ONNX runtime requires a C shared library, which complicates CI + `go install`. Documented in `INTERVIEW_DEFENSE.md` D12. |
 
-**Default model (local):** [BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) — 384-dim, 33M params, ~130 MB ONNX file. Strong general-purpose English encoder, leads its weight class on MTEB. Distributed alongside the binary (we ship it; we don't `wget` at runtime).
+**Why API-first for v0.1:**
+- A single HTTP call per scan beats a 4-6 hour toolchain detour to get ONNX building cleanly in CI on every PR.
+- Voyage's free tier (200M tokens/month) covers any realistic individual or CI workload — practitioners can adopt without a paid account.
+- The `Embedder` interface stays the same regardless. Adopting local ONNX in v0.2 is a constructor swap, not an architectural change.
 
-**Decision rationale:**
-- Offline-first matches the practitioner posture (no SaaS account just to scan one config file).
-- 384-dim is small enough that the entire corpus (15 entries today, ~1000 plausible v1.0) is a `[]float32` slice with sub-megabyte memory.
-- ONNX Runtime has stable Go bindings ([yalue/onnxruntime_go](https://github.com/yalue/onnxruntime_go)).
-- If a user wants higher recall (`bge-large`, `text-embedding-3-large`), the backend interface is one function — they swap and rebuild.
+**Honest disclosure:** The original plan was local-ONNX-first. Real CI integration showed the cost was prohibitive for a v0.1 shipping target. We chose to ship a working remote backend now and roadmap the local backend rather than block the project on infrastructure. See `INTERVIEW_DEFENSE.md` D12 for the full pushback/answer.
 
 ### 4.3 The retrieval
 
