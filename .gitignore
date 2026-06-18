@@ -1,0 +1,33 @@
+# Binaries
+/sentinel
+/mcp-sentinel
+*.exe
+*.test
+*.out
+
+# Go build cache
+/bin/
+/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Local config / secrets
+.env
+.env.*
+!.env.example
+config.local.yaml
+
+# Coverage
+coverage.out
+coverage.html
+
+# Scratch / personal
+notes/scratch/
+TODO.local.md
+
+# Interview prep — private, do not push
+INTERVIEW_DEFENSE.md
