@@ -11,10 +11,11 @@ import (
 
 	"github.com/AadiDev005/mcp-sentinel/internal/corpus"
 	"github.com/AadiDev005/mcp-sentinel/internal/embed"
+	"github.com/AadiDev005/mcp-sentinel/internal/judge"
 	"github.com/AadiDev005/mcp-sentinel/internal/scanner"
 )
 
-const version = "0.0.3-dev"
+const version = "0.0.4-dev"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -59,6 +60,7 @@ func runScan(args []string) int {
 	topK := fs.Int("top-k", 3, "number of nearest corpus entries to return per Unit (requires --embed)")
 	minSim := fs.Float64("similarity", 0.55, "minimum cosine similarity to report a match (requires --embed)")
 	v01Only := fs.Bool("v01-only", false, "restrict embed-stage matches to v0.1-scoped corpus entries")
+	useJudge := fs.Bool("judge", false, "enable Stage 3: structurally-defended LLM judge on the top embed match per Unit (requires --embed and ANTHROPIC_API_KEY)")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, `Usage: mcp-sentinel scan [flags] <input.json>
 
@@ -114,10 +116,30 @@ Flags:`)
 		}
 	}
 
+	// Stage 3 (optional): LLM judge on the top embed match per Unit.
+	// Requires Stage 2 because the judge needs a corpus_id to compare
+	// against — without --embed there's no top match to judge.
+	var unitVerdicts map[int]judge.Verdict
+	if *useJudge {
+		if !*useEmbed {
+			fmt.Fprintln(os.Stderr, "scan: --judge requires --embed (judge needs a corpus match to evaluate)")
+			return 2
+		}
+		var err error
+		unitVerdicts, err = runJudgeStage(entries, units, unitMatches)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "scan: judge stage: %v\n", err)
+			return 2
+		}
+	}
+
 	// Report.
 	fmt.Printf("scan: %d units, %d with prefilter hits", len(units), len(hits))
 	if *useEmbed {
 		fmt.Printf(", embed stage enabled (model=%s)", "voyage:voyage-3.5-lite")
+	}
+	if *useJudge {
+		fmt.Printf(", judge stage enabled (model=%s)", judge.AnthropicDefaultModel)
 	}
 	fmt.Println()
 	fmt.Println()
@@ -134,6 +156,23 @@ Flags:`)
 			for _, m := range matches {
 				fmt.Printf("      [embed]     %-16s sim=%.3f category=%s severity=%s\n",
 					m.CorpusID, m.Similarity, m.Category, m.Severity)
+			}
+		}
+		if v, ok := unitVerdicts[i]; ok {
+			label := "MALICIOUS"
+			if !v.Malicious {
+				label = "BENIGN   "
+			}
+			flags := ""
+			if v.Defense4Triggered {
+				flags += " [defense4]"
+			}
+			if v.Inconsistent {
+				flags += " [inconsistent]"
+			}
+			fmt.Printf("      [judge]     %s confidence=%.2f%s\n", label, v.Confidence, flags)
+			if v.Reasoning != "" {
+				fmt.Printf("                  reasoning: %s\n", v.Reasoning)
 			}
 		}
 		fmt.Println()
@@ -201,6 +240,75 @@ func runEmbedStage(
 		if len(all[batchIdx]) > 0 {
 			out[unitIdx] = all[batchIdx]
 		}
+	}
+	return out, nil
+}
+
+// runJudgeStage runs Stage 3 on the top-1 corpus match per Unit that
+// survived Stage 2. The judge is expensive (~1-2s per call); calling it
+// only on the top match keeps the cost budget bounded.
+//
+// Returns a map[unit_index]Verdict. Units with no embed match (and
+// therefore no judge candidate) are absent from the map.
+func runJudgeStage(
+	entries []corpus.Entry,
+	units []scanner.Unit,
+	unitMatches map[int][]embed.Match,
+) (map[int]judge.Verdict, error) {
+	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("ANTHROPIC_API_KEY not set (required when --judge is enabled)")
+	}
+
+	a, err := judge.NewAnthropic(judge.AnthropicConfig{APIKey: apiKey})
+	if err != nil {
+		return nil, err
+	}
+
+	// Build a lookup from corpus_id → Entry so we can pass the right
+	// payload + judge_hints to each Judge call.
+	entryByID := make(map[string]corpus.Entry, len(entries))
+	for _, e := range entries {
+		entryByID[e.ID] = e
+	}
+
+	out := make(map[int]judge.Verdict)
+	for unitIdx, matches := range unitMatches {
+		if len(matches) == 0 {
+			continue
+		}
+		top := matches[0]
+		entry, ok := entryByID[top.CorpusID]
+		if !ok {
+			// Stage 2 returned a corpus_id we don't have an entry for —
+			// shouldn't happen. Skip rather than crash.
+			continue
+		}
+
+		// Per-judge-call timeout: 30s is plenty for Haiku.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		v, err := a.Judge(ctx, judge.JudgeInput{
+			CandidateText:       units[unitIdx].Text,
+			CandidateSurface:    string(units[unitIdx].Surface),
+			KnownAttackID:       entry.ID,
+			KnownAttackText:     entry.Payload.Text,
+			KnownAttackCategory: entry.PrimaryCategory,
+			JudgeQuestion:       entry.JudgeHints.PrimaryQuestion,
+			ExpectedEvidence:    entry.JudgeHints.ExpectedEvidence,
+		})
+		cancel()
+		if err != nil {
+			// Don't fail the whole scan on one judge failure; log via a
+			// synthetic verdict so the user sees something happened.
+			out[unitIdx] = judge.Verdict{
+				Malicious:  false,
+				Confidence: 0,
+				Reasoning:  "judge error: " + err.Error(),
+				JudgeName:  a.Name(),
+			}
+			continue
+		}
+		out[unitIdx] = v
 	}
 	return out, nil
 }

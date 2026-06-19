@@ -41,7 +41,7 @@ Implementation phase (in progress):
 - [x] Stage 0 — JSON ingest into per-surface `Unit` records
 - [x] Stage 1 — literal / pseudo-XML / parameter-name prefilter
 - [x] Stage 2 — embedding retrieval via Voyage AI (`voyage-3.5-lite`)
-- [ ] Stage 3 — structurally-defended LLM judge
+- [x] Stage 3 — structurally-defended LLM judge (Anthropic Claude, `tool_use` schema firewall + self-consistency + Unicode-normalized input sanitizer)
 - [ ] Stage 4 — text / json / sarif report renderers
 - [ ] Negative corpus: 40+ benign entries from `modelcontextprotocol/servers`
 - [ ] Threshold tuning on benign corpus once it exists
