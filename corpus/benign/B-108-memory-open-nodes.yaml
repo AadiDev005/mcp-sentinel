@@ -1,0 +1,23 @@
+# Auto-extracted by tools/extract-benign. Do not hand-edit.
+# Source: https://raw.githubusercontent.com/modelcontextprotocol/servers/main/src/memory/index.ts
+# Server: memory (MIT)
+
+id: B-108
+slug: memory-open-nodes
+title: 'memory server: open_nodes'
+version: 1
+created: "2026-06-22"
+updated: "2026-06-22"
+expected_classification: benign
+payload:
+    surface: tool_description
+    text: Open specific nodes in the knowledge graph by their names
+    context: {}
+source:
+    type: github_repo
+    repo: modelcontextprotocol/servers
+    path: src/memory/index.ts
+    url: https://raw.githubusercontent.com/modelcontextprotocol/servers/main/src/memory/index.ts
+    license: MIT
+    server_name: memory
+notes: 'Auto-extracted from upstream memory server. Tool name: open_nodes. Parameters: names.'

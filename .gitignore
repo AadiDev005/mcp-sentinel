@@ -1,6 +1,7 @@
 # Binaries
 /sentinel
 /mcp-sentinel
+/extract-benign
 *.exe
 *.test
 *.out
